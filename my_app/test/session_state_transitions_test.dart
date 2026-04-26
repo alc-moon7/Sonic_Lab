@@ -36,6 +36,36 @@ void main() {
     expect(state?.status, SessionStatus.complete);
     expect(state?.mode, CleaningMode.water);
   });
+
+  test('audioSessionProvider stops an active session on request', () async {
+    final backend = FakeAudioBackend();
+    final container = ProviderContainer(
+      overrides: [
+        audioEngineProvider.overrideWithValue(
+          AudioEngine.test(backend: backend),
+        ),
+        volumeChannelProvider.overrideWithValue(FakeVolumeChannel()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(audioSessionProvider.notifier).startWaterSession(
+          DeviceDetector.defaultProfile,
+          const Duration(seconds: 30),
+        );
+
+    expect(
+      container.read(audioSessionProvider).valueOrNull?.status,
+      SessionStatus.playing,
+    );
+    expect(backend.playing, isTrue);
+
+    await container.read(audioSessionProvider.notifier).stopSession();
+
+    final state = container.read(audioSessionProvider).valueOrNull;
+    expect(state?.status, SessionStatus.idle);
+    expect(backend.playing, isFalse);
+  });
 }
 
 class FakeVolumeChannel extends VolumeChannel {

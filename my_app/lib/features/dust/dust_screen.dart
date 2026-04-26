@@ -117,14 +117,16 @@ class _DustScreenState extends ConsumerState<DustScreen> {
                     const SizedBox(height: 26),
                     GlowCircleButton(
                       variant: GlowCircleVariant.dust,
-                      icon: Icons.vibration,
+                      icon:
+                          isDustPlaying ? Icons.stop_rounded : Icons.vibration,
                       label: 'Clean Dust',
                       isPlaying: isDustPlaying,
                       progress: session.progress,
                       countdownText:
                           isDustPlaying ? '${session.remainingSeconds}s' : null,
-                      onPressed: () =>
-                          _startDust(profile, settings.selectedDuration),
+                      onPressed: () => isDustPlaying
+                          ? _stopActiveSession('Dust session stopped')
+                          : _startDust(profile, settings.selectedDuration),
                     ),
                     SessionStatusCard(
                       session:
@@ -189,6 +191,25 @@ class _DustScreenState extends ConsumerState<DustScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to start dust session')),
+      );
+    }
+  }
+
+  Future<void> _stopActiveSession(String message) async {
+    try {
+      await ref.read(audioSessionProvider.notifier).stopSession();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } on Exception {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to stop session')),
       );
     }
   }

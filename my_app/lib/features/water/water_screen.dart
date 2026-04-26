@@ -120,17 +120,21 @@ class _WaterScreenState extends ConsumerState<WaterScreen> {
                           const SizedBox(height: 10),
                         GlowCircleButton(
                           variant: GlowCircleVariant.water,
-                          icon: Icons.water_drop,
+                          icon: isWaterPlaying
+                              ? Icons.stop_rounded
+                              : Icons.water_drop,
                           label: 'Clean Water',
                           isPlaying: isWaterPlaying,
                           progress: session.progress,
                           countdownText: isWaterPlaying
                               ? '${session.remainingSeconds}s'
                               : null,
-                          onPressed: () => _startWater(
-                            profile ?? DeviceDetector.defaultProfile,
-                            settings.selectedDuration,
-                          ),
+                          onPressed: () => isWaterPlaying
+                              ? _stopActiveSession('Water session stopped')
+                              : _startWater(
+                                  profile ?? DeviceDetector.defaultProfile,
+                                  settings.selectedDuration,
+                                ),
                         ),
                         SessionStatusCard(
                           session: isWaterPlaying ||
@@ -194,6 +198,25 @@ class _WaterScreenState extends ConsumerState<WaterScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to start water session')),
+      );
+    }
+  }
+
+  Future<void> _stopActiveSession(String message) async {
+    try {
+      await ref.read(audioSessionProvider.notifier).stopSession();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } on Exception {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to stop session')),
       );
     }
   }
