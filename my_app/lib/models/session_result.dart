@@ -52,7 +52,8 @@ class SessionState {
 
   int get remainingSeconds {
     final remaining = total - elapsed;
-    return remaining.inSeconds.clamp(0, total.inSeconds);
+    final seconds = (remaining.inMilliseconds / 1000).ceil();
+    return seconds.clamp(0, total.inSeconds).toInt();
   }
 
   SessionState copyWith({

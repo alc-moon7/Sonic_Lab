@@ -21,6 +21,7 @@ final audioSessionProvider =
 
 class AudioSessionNotifier extends AsyncNotifier<SessionState> {
   Timer? _timer;
+  int _sessionRunId = 0;
 
   @override
   FutureOr<SessionState> build() {
@@ -85,6 +86,7 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
   }
 
   Future<void> stopSession() async {
+    _sessionRunId += 1;
     _timer?.cancel();
     _timer = null;
     try {
@@ -106,6 +108,7 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
     required Future<void> Function() playback,
     required double Function(double progress) frequencyAtProgress,
   }) async {
+    final runId = ++_sessionRunId;
     _timer?.cancel();
     state = AsyncData(
       SessionState(
@@ -114,28 +117,45 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
         elapsed: Duration.zero,
         total: duration,
         mode: mode,
+        message: _runningMessage(mode),
       ),
+    );
+    _runCountdown(
+      runId: runId,
+      mode: mode,
+      duration: duration,
+      frequencyAtProgress: frequencyAtProgress,
     );
     try {
       await HapticHelper.selectionClick();
       await playback();
-      _runCountdown(
-        mode: mode,
-        duration: duration,
-        frequencyAtProgress: frequencyAtProgress,
-      );
     } on Exception catch (error, stackTrace) {
+      if (runId != _sessionRunId) {
+        return;
+      }
+      _timer?.cancel();
+      _timer = null;
+      try {
+        await ref.read(audioEngineProvider).stop();
+      } on Exception {
+        // The original playback exception is more useful to surface.
+      }
       state = AsyncError(error, stackTrace);
     }
   }
 
   void _runCountdown({
+    required int runId,
     required CleaningMode mode,
     required Duration duration,
     required double Function(double progress) frequencyAtProgress,
   }) {
     final startedAt = DateTime.now();
     _timer = Timer.periodic(const Duration(milliseconds: 250), (timer) async {
+      if (runId != _sessionRunId) {
+        timer.cancel();
+        return;
+      }
       final elapsed = DateTime.now().difference(startedAt);
       final progress =
           (elapsed.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
@@ -152,7 +172,7 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
               elapsed: duration,
               total: duration,
               mode: mode,
-              message: 'Session Complete',
+              message: _completeMessage(mode),
             ),
           );
         } on Exception catch (error, stackTrace) {
@@ -167,6 +187,7 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
           elapsed: elapsed,
           total: duration,
           mode: mode,
+          message: _runningMessage(mode),
         ),
       );
     });
@@ -176,5 +197,21 @@ class AudioSessionNotifier extends AsyncNotifier<SessionState> {
     return profile.brand == 'Samsung'
         ? FrequencyConstants.samsungWaterAmplitude
         : FrequencyConstants.fullAmplitude;
+  }
+
+  String _runningMessage(CleaningMode mode) {
+    return switch (mode) {
+      CleaningMode.water => 'Water ejection running',
+      CleaningMode.dust => 'Dust sweep running',
+      CleaningMode.sonic => 'Sonic tone running',
+    };
+  }
+
+  String _completeMessage(CleaningMode mode) {
+    return switch (mode) {
+      CleaningMode.water => 'Water ejection complete',
+      CleaningMode.dust => 'Dust removal sweep complete',
+      CleaningMode.sonic => 'Sonic tone complete',
+    };
   }
 }

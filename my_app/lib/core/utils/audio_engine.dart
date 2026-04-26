@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 enum SweepType { linear, logarithmic, sawtooth, random }
@@ -37,7 +38,11 @@ abstract class AudioBackend {
 
 class AudioEngine {
   AudioEngine._({AudioBackend? backend})
-      : _backend = backend ?? JustAudioToneBackend();
+      : _backend = backend ??
+            CompositeAudioBackend(
+              primary: NativeAudioBackend(),
+              fallback: JustAudioToneBackend(),
+            );
 
   factory AudioEngine.test({required AudioBackend backend}) {
     return AudioEngine._(backend: backend);
@@ -182,6 +187,200 @@ class AudioEngine {
         _frequencyTimer?.cancel();
       }
     });
+  }
+}
+
+class CompositeAudioBackend implements AudioBackend {
+  CompositeAudioBackend({
+    required this.primary,
+    required this.fallback,
+  });
+
+  final AudioBackend primary;
+  final AudioBackend fallback;
+  AudioBackend? _activeBackend;
+
+  @override
+  bool get isPlaying => _activeBackend?.isPlaying ?? false;
+
+  @override
+  Future<void> playSine(
+    double frequency, {
+    required double amplitude,
+    required int durationMs,
+    required bool loop,
+  }) async {
+    await _tryPrimary(
+      () => primary.playSine(
+        frequency,
+        amplitude: amplitude,
+        durationMs: durationMs,
+        loop: loop,
+      ),
+      () => fallback.playSine(
+        frequency,
+        amplitude: amplitude,
+        durationMs: durationMs,
+        loop: loop,
+      ),
+    );
+  }
+
+  @override
+  Future<void> playSweep(
+    double startHz,
+    double endHz,
+    int durationMs, {
+    required SweepType type,
+    required double amplitude,
+  }) async {
+    await _tryPrimary(
+      () => primary.playSweep(
+        startHz,
+        endHz,
+        durationMs,
+        type: type,
+        amplitude: amplitude,
+      ),
+      () => fallback.playSweep(
+        startHz,
+        endHz,
+        durationMs,
+        type: type,
+        amplitude: amplitude,
+      ),
+    );
+  }
+
+  @override
+  Future<void> playPulse(
+    double frequency,
+    int onMs,
+    int offMs, {
+    required int totalDurationMs,
+    required double amplitude,
+  }) async {
+    await _tryPrimary(
+      () => primary.playPulse(
+        frequency,
+        onMs,
+        offMs,
+        totalDurationMs: totalDurationMs,
+        amplitude: amplitude,
+      ),
+      () => fallback.playPulse(
+        frequency,
+        onMs,
+        offMs,
+        totalDurationMs: totalDurationMs,
+        amplitude: amplitude,
+      ),
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    final active = _activeBackend;
+    _activeBackend = null;
+    if (active != null) {
+      await active.stop();
+      return;
+    }
+    try {
+      await primary.stop();
+    } on Exception {
+      // The native channel may not exist on desktop/web test hosts.
+    }
+    await fallback.stop();
+  }
+
+  Future<void> _tryPrimary(
+    Future<void> Function() primaryCall,
+    Future<void> Function() fallbackCall,
+  ) async {
+    try {
+      await fallback.stop();
+      await primaryCall();
+      _activeBackend = primary;
+    } on Exception {
+      try {
+        await primary.stop();
+      } on Exception {
+        // Fall through to the Dart audio fallback.
+      }
+      await fallbackCall();
+      _activeBackend = fallback;
+    }
+  }
+}
+
+class NativeAudioBackend implements AudioBackend {
+  static const MethodChannel _channel = MethodChannel('com.soniclab/audio');
+
+  bool _isPlaying = false;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  Future<void> playSine(
+    double frequency, {
+    required double amplitude,
+    required int durationMs,
+    required bool loop,
+  }) async {
+    await _invoke('playSine', {
+      'frequency': frequency,
+      'amplitude': amplitude,
+      'durationMs': durationMs,
+      'loop': loop,
+    });
+  }
+
+  @override
+  Future<void> playSweep(
+    double startHz,
+    double endHz,
+    int durationMs, {
+    required SweepType type,
+    required double amplitude,
+  }) async {
+    await _invoke('playSweep', {
+      'startHz': startHz,
+      'endHz': endHz,
+      'durationMs': durationMs,
+      'type': type.name,
+      'amplitude': amplitude,
+    });
+  }
+
+  @override
+  Future<void> playPulse(
+    double frequency,
+    int onMs,
+    int offMs, {
+    required int totalDurationMs,
+    required double amplitude,
+  }) async {
+    await _invoke('playPulse', {
+      'frequency': frequency,
+      'onMs': onMs,
+      'offMs': offMs,
+      'totalDurationMs': totalDurationMs,
+      'amplitude': amplitude,
+    });
+  }
+
+  @override
+  Future<void> stop() async {
+    _isPlaying = false;
+    await _channel.invokeMethod<void>('stop');
+  }
+
+  Future<void> _invoke(String method, Map<String, Object> arguments) async {
+    _isPlaying = false;
+    await _channel.invokeMethod<void>(method, arguments);
+    _isPlaying = true;
   }
 }
 

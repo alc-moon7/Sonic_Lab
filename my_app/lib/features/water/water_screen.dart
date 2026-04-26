@@ -15,6 +15,7 @@ import '../../core/widgets/device_detected_sheet.dart';
 import '../../core/widgets/duration_selector_panel.dart';
 import '../../core/widgets/glow_circle_button.dart';
 import '../../core/widgets/metric_card.dart';
+import '../../core/widgets/session_status_card.dart';
 import '../../core/widgets/tip_card.dart';
 import '../../core/utils/device_detector.dart';
 import '../../models/phone_profile.dart';
@@ -37,12 +38,20 @@ class _WaterScreenState extends ConsumerState<WaterScreen> {
   void initState() {
     super.initState();
     _sessionSubscription = ref.listenManual(audioSessionProvider, (_, next) {
+      if (next.hasError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Audio failed to start. Turn volume up and try again.'),
+          ),
+        );
+      }
       final session = next.valueOrNull;
       if (session?.status == SessionStatus.complete &&
           session?.mode == CleaningMode.water &&
           mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session Complete')),
+          SnackBar(content: Text(session?.message ?? 'Session Complete')),
         );
       }
     });
@@ -122,6 +131,13 @@ class _WaterScreenState extends ConsumerState<WaterScreen> {
                             profile ?? DeviceDetector.defaultProfile,
                             settings.selectedDuration,
                           ),
+                        ),
+                        SessionStatusCard(
+                          session: isWaterPlaying ||
+                                  session.mode == CleaningMode.water
+                              ? session
+                              : SessionState.idle(),
+                          activeColor: AppColors.water,
                         ),
                         const SizedBox(height: 30),
                         DurationSelectorPanel(

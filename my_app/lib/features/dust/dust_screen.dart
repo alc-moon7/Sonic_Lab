@@ -14,6 +14,7 @@ import '../../core/widgets/app_top_bar.dart';
 import '../../core/widgets/duration_selector_panel.dart';
 import '../../core/widgets/glow_circle_button.dart';
 import '../../core/widgets/metric_card.dart';
+import '../../core/widgets/session_status_card.dart';
 import '../../models/phone_profile.dart';
 import '../../models/session_result.dart';
 import '../water/widgets/science_info_sheet.dart';
@@ -34,12 +35,20 @@ class _DustScreenState extends ConsumerState<DustScreen> {
   void initState() {
     super.initState();
     _sessionSubscription = ref.listenManual(audioSessionProvider, (_, next) {
+      if (next.hasError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Audio failed to start. Turn volume up and try again.'),
+          ),
+        );
+      }
       final session = next.valueOrNull;
       if (session?.status == SessionStatus.complete &&
           session?.mode == CleaningMode.dust &&
           mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session Complete')),
+          SnackBar(content: Text(session?.message ?? 'Session Complete')),
         );
       }
     });
@@ -116,6 +125,13 @@ class _DustScreenState extends ConsumerState<DustScreen> {
                           isDustPlaying ? '${session.remainingSeconds}s' : null,
                       onPressed: () =>
                           _startDust(profile, settings.selectedDuration),
+                    ),
+                    SessionStatusCard(
+                      session:
+                          isDustPlaying || session.mode == CleaningMode.dust
+                              ? session
+                              : SessionState.idle(),
+                      activeColor: AppColors.lime,
                     ),
                     const SizedBox(height: 30),
                     DurationSelectorPanel(
