@@ -45,7 +45,7 @@ class SettingsScreen extends ConsumerWidget {
                       PopupMenuItem(
                           value: 'About SONIC_LAB', child: Text('About')),
                       PopupMenuItem(
-                          value: 'Changelog v2.4.0-STABLE',
+                          value: 'Changelog v2.4.1-STABLE',
                           child: Text('Changelog')),
                     ],
                   ),
@@ -256,7 +256,7 @@ class _VersionBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Text(
-        'v2.4.0-STABLE',
+        'v2.4.1-STABLE',
         style: TextStyle(
           color: AppColors.textSecondary,
           fontSize: 9,
