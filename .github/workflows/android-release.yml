@@ -52,14 +52,14 @@ jobs:
         run: flutter build appbundle --release
 
       - name: Upload release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sonic-lab-release-apk
           path: my_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
       - name: Upload release app bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sonic-lab-release-aab
           path: my_app/build/app/outputs/bundle/release/app-release.aab
